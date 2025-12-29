@@ -1,9 +1,14 @@
 //SPDX-License-Identifier: GPL-2.0
 package me.phh.ims
 
+import android.content.Context
 import android.os.Bundle
 import android.os.Message
 import android.telephony.Rlog
+import android.telephony.ServiceState
+import android.telephony.SubscriptionManager
+import android.telephony.TelephonyCallback
+import android.telephony.TelephonyManager
 import android.telephony.ims.ImsCallProfile
 import android.telephony.ims.ImsCallSessionListener
 import android.telephony.ims.ImsReasonInfo
@@ -14,6 +19,7 @@ import android.telephony.ims.stub.ImsMultiEndpointImplBase
 import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_LTE
 import android.telephony.ims.stub.ImsSmsImplBase
 import android.telephony.ims.stub.ImsUtImplBase
+import java.util.concurrent.Executors
 import me.phh.sip.SipHandler
 import me.phh.sip.randomBytes
 import me.phh.sip.toHex
@@ -28,8 +34,33 @@ class PhhMmTelFeature(val slotId: Int) : PhhMmTelFeatureProtected(slotId) {
         private const val TAG = "PHH MmTelFeature"
     }
 
+    var telephonyManager: TelephonyManager? = null
+
     val imsSms = PhhImsSms(slotId)
     lateinit var sipHandler: SipHandler
+
+    override fun initialize(context: Context?, slotId: Int) {
+        super.initialize(context, slotId)
+        featureState = STATE_INITIALIZING
+
+        telephonyManager =
+            mContext.getSystemService(TelephonyManager::class.java)
+                .createForSubscriptionId(SubscriptionManager.getSubscriptionId(slotId))
+
+        telephonyManager?.registerTelephonyCallback(
+            Executors.newSingleThreadExecutor(),
+            object : TelephonyCallback(), TelephonyCallback.ServiceStateListener {
+                override fun onServiceStateChanged(serviceState: ServiceState) {
+                    serviceState.networkRegistrationInfoList.forEach {
+                        // A valid RPLMN is needed for SipHandler
+                        if (!(it.registeredPlmn?.isEmpty() ?: true)) {
+                            featureState = STATE_READY
+                            telephonyManager?.unregisterTelephonyCallback(this)
+                        }
+                    }
+                }
+            })
+    }
 
     override fun createCallProfile(callSessionType: Int, callType: Int): ImsCallProfile {
         Rlog.d(TAG, "$slotId createCallProfile $callSessionType $callType")
@@ -87,12 +118,6 @@ class PhhMmTelFeature(val slotId: Int) : PhhMmTelFeatureProtected(slotId) {
     fun getInstance(slotId: Int): PhhMmTelFeature {
         Rlog.d(TAG, "$slotId getInstance")
         return PhhMmTelFeature(slotId)
-    }
-
-    override fun getFeatureState(): Int {
-        Rlog.d(TAG, "$slotId getFeatureState")
-        // always ready for now... Also STATE_INITIALIZING, STATE_UNAVAILABLE
-        return ImsFeature.STATE_READY
     }
 
     override fun getMultiEndpoint(): ImsMultiEndpointImplBase {
