@@ -1,22 +1,57 @@
+// SPDX-License-Identifier: GPL-2.0
+
+// RNNoise noise suppression JNI library
+cc_library_shared {
+    name: "librnnoise_jni",
+    srcs: [
+        "app/jni/rnnoise_jni.c",
+        "app/jni/rnnoise/src/denoise.c",
+        "app/jni/rnnoise/src/kiss_fft.c",
+        "app/jni/rnnoise/src/rnn.c",
+        "app/jni/rnnoise/src/rnn_data.c",
+        "app/jni/rnnoise/src/pitch.c",
+        "app/jni/rnnoise/src/celt_lpc.c",
+    ],
+    local_include_dirs: ["app/jni/rnnoise/include"],
+    shared_libs: [
+        "liblog",
+        "libm",
+    ],
+    cflags: ["-Wno-unused-parameter"],
+}
+
+// IMS service providing VoLTE via a SIP/IMS stack
 android_app {
     name: "PhhIms",
-    srcs: ["app/src/main/java/**/*.kt", "app/src/main/java/**/*.java"],
+
+    srcs: [
+        "app/src/main/java/**/*.kt",
+        "app/src/main/java/**/*.java",
+    ],
     resource_dirs: ["app/src/main/res"],
     manifest: "app/src/main/AndroidManifest.xml",
+
+
     certificate: "platform",
     privileged: true,
     platform_apis: true,
+
     static_libs: [
-      "com.google.android.material_material",
-      "kotlinx-coroutines-android",
+        "kotlin-stdlib",
+        "kotlinx_coroutines",
+        "kotlinx_coroutines_android",
     ],
+
+    jni_libs: ["librnnoise_jni"],
+
     required: ["PhhImsOverlay"],
 }
 
+// Static RRO: registers me.phh.ims as the IMS MmTel service with the Phone app
 runtime_resource_overlay {
-  name: "PhhImsOverlay",
-  resource_dirs: ["overlay/res"],
-  manifest: "overlay/AndroidManifest.xml",
-  certificate: "platform",
-  product_specific: true,
+    name: "PhhImsOverlay",
+    resource_dirs: ["overlay/res"],
+    manifest: "overlay/AndroidManifest.xml",
+    certificate: "platform",
+    product_specific: true,
 }
