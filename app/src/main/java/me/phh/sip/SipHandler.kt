@@ -1020,9 +1020,18 @@ a=sendrecv
     }
 
     fun terminateCall() {
-        // IDK what packet do we send, but at least we're close rtp
         callStopped.set(true)
-
+        val call = currentCall ?: return
+        val bye = SipRequest(
+            SipMethod.BYE,
+            call.remoteContact,
+            headersParam = commonHeaders +
+                ("from"    to call.callHeaders["from"]!!) +
+                ("to"      to call.callHeaders["to"]!!) +
+                ("call-id" to call.callHeaders["call-id"]!!)
+        )
+        Rlog.d(TAG, "Sending BYE $bye")
+        synchronized(socket.gWriter()) { socket.gWriter().write(bye.toByteArray()) }
         onCancelledCall?.invoke(Object(), "", emptyMap())
     }
 
@@ -1210,7 +1219,8 @@ a=sendrecv
                     rtpRemotePort = rtpRemotePort.toInt(),
                     rtpSocket = rtpSocket,
                     sdp = resp.body,
-                    hasEarlyMedia = resp.headers["p-early-media"]?.isNotEmpty() == true
+                    hasEarlyMedia = resp.headers["p-early-media"]?.isNotEmpty() == true,
+                    remoteContact = extractDestinationFromContact(resp.headers["contact"]!![0]),
                 )
 
                 // This isn't the answer to our INVITE, but to our later precondition UPDATE
@@ -1510,6 +1520,7 @@ a=sendrecv
                 rtpSocket =  rtpSocket,
                 sdp = mySdp,
                 hasEarlyMedia = hasEarlyMedia,
+                remoteContact = extractDestinationFromContact(request.headers["contact"]!![0]),
             )
 
             callDecodeThread()
